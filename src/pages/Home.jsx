@@ -74,6 +74,8 @@ function Home() {
     logo: {
       width: isMobile ? '60px' : '75px',
       marginBottom: '10px',
+      cursor: 'pointer', // Adicionado para indicar que é clicável
+      transition: '0.3s opacity'
     },
     title: {
       fontSize: isMobile ? '24px' : '32px',
@@ -150,7 +152,6 @@ function Home() {
       transform: hoverBtn ? 'translate(4px, 4px)' : 'none'
     },
 
-    // ESTILO IGUAL À CAIXA DE RESERVA (BARRA DE LOCALIZAÇÃO)
     locationBar: {
       width: '90%',
       maxWidth: '850px',
@@ -203,7 +204,13 @@ function Home() {
       </div>
 
       <header style={styles.header}>
-        <img src={logo} alt="Logo" style={styles.logo} />
+        {/* LOGO COM FUNÇÃO DE NAVEGAÇÃO PARA LOGIN */}
+        <img 
+          src={logo} 
+          alt="Logo" 
+          style={styles.logo} 
+          onClick={() => navigate('/login')}
+        />
         <h1 style={styles.title}>ARENA <span style={{color: '#FDCC1A'}}>SANDPLAY</span></h1>
         <p style={{color: '#666', fontWeight: '600', fontSize: isMobile ? '12px' : '14px', margin: '5px 0 0 0'}}>
           BEACH TENNIS • FUTEVÔLEI • VÔLEI DE PRAIA
@@ -232,7 +239,6 @@ function Home() {
           RESERVAR AGORA
         </button>
 
-        {/* BARRA DE LOCALIZAÇÃO ESTILO "CAIXA DE RESERVA" */}
         <div 
           style={styles.locationBar} 
           onClick={abrirMapa}
