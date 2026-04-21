@@ -55,7 +55,7 @@ function Reserva() {
     }
   };
 
-  const reservar = async () => {
+const reservar = async () => {
     if (!nome || !telefone || !data || !horario || !duracao) {
       alert('Preencha todos os campos!');
       return;
@@ -74,6 +74,11 @@ function Reserva() {
         return;
       }
 
+      // --- AJUSTE AQUI: Limpeza do número para o link ---
+      const apenasNumeros = telefone.replace(/\D/g, '');
+      const whatsappLimpo = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
+      // ------------------------------------------------
+
       const dataLimpa = data.replace(/-/g, '');
       const horaLimpa = horario.replace(/:/g, '');
       const dataInicio = `${dataLimpa}T${horaLimpa}00`;
@@ -82,7 +87,17 @@ function Reserva() {
       const linkAgenda = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('RESERVA: ' + nome)}&details=${encodeURIComponent('Whats: ' + telefone + ' | Duração: ' + duracao)}&dates=${dataInicio}/${dataFim}&ctz=America/Recife`;
 
       await addDoc(collection(db, 'reservas'), { nome, telefone, data, horario, duracao, createdAt: new Date() });
-      await emailjs.send('service_233qjjw', 'template_50j4t97', { nome, whatsapp: telefone, data, horario, duracao, linkAgenda }, 'KXItBnd5tPOtCMzC8');
+      
+      // Enviando whatsappLimpo para o link e telefone (formatado) para o texto
+      await emailjs.send('service_233qjjw', 'template_50j4t97', { 
+        nome, 
+        whatsapp: whatsappLimpo, 
+        whatsapp_display: telefone, 
+        data, 
+        horario, 
+        duracao, 
+        linkAgenda 
+      }, 'KXItBnd5tPOtCMzC8');
 
       navigate('/pagamento', { state: { nome, data, horario, telefone, duracao } });
     } catch (error) {
@@ -92,7 +107,6 @@ function Reserva() {
       setLoading(false);
     }
   };
-
   const styles = {
     page: { 
       minHeight: '100vh', 
