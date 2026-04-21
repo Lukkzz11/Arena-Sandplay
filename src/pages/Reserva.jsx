@@ -54,61 +54,88 @@ function Reserva() {
     }
   };
 
-const reservar = async () => {
-  if (!nome || !telefone || !data || !horario || !duracao) {
-    alert('Preencha todos os campos!');
-    return;
-  }
-  setLoading(true);
-
-  try {
-    // 1. Criamos um ID ÚNICO baseado na DATA e HORA (ex: 2026-04-28_20:00)
-    // Isso garante que NUNCA existirão dois documentos no mesmo minuto
-    const reservaId = `${data}_${horario}`;
-    const docRef = doc(db, 'reservas', reservaId);
-    const docSnap = await getDoc(docRef);
-
-    // 2. Se esse ID já existir, nem tenta gravar
-    if (docSnap.exists()) {
-      alert('Este horário já está ocupado por um mensalista ou outra reserva!');
-      setLoading(false);
+  const reservar = async () => {
+    if (!nome || !telefone || !data || !horario || !duracao) {
+      alert('Preencha todos os campos!');
       return;
     }
+    setLoading(true);
 
-    // Se passou, seguimos com a gravação
-    const apenasNumeros = telefone.replace(/\D/g, '');
-    const whatsappLimpo = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
-    const dataLimpa = data.replace(/-/g, '');
-    const horaLimpa = horario.replace(/:/g, '');
-    const dataInicio = `${dataLimpa}T${horaLimpa}00`;
-    const horaFimNum = (parseInt(horaLimpa.substring(0, 2)) + 1).toString().padStart(2, '0');
-    const dataFim = `${dataLimpa}T${horaFimNum}${horaLimpa.substring(2)}00`;
-    const linkAgenda = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('RESERVA: ' + nome)}&details=${encodeURIComponent('Whats: ' + telefone + ' | Duração: ' + duracao)}&dates=${dataInicio}/${dataFim}&ctz=America/Recife`;
+    try {
+      // 1️⃣ CONSULTA NA COLEÇÃO DE RESERVAS (Diaristas e mensalistas já gerados)
+      const qReservas = query(
+        collection(db, 'reservas'),
+        where('data', '==', data),
+        where('horario', '==', horario)
+      );
+      const snapReservas = await getDocs(qReservas);
 
-    // 3. USAMOS 'setDoc' com o ID ÚNICO em vez de 'addDoc'
-    await setDoc(docRef, { 
-      nome, 
-      telefone, 
-      data, 
-      horario, 
-      duracao, 
-      tipo: 'diaria',
-      createdAt: new Date() 
-    });
-    
-    await emailjs.send('service_233qjjw', 'template_50j4t97', { 
-      nome, whatsapp: whatsappLimpo, whatsapp_display: telefone, 
-      data, horario, duracao, linkAgenda 
-    }, 'KXItBnd5tPOtCMzC8');
+      if (!snapReservas.empty) {
+        alert('⚠️ Este horário já está ocupado por uma reserva confirmada!');
+        setLoading(false);
+        return;
+      }
 
-    navigate('/pagamento', { state: { nome, data, horario, telefone, duracao } });
-  } catch (error) {
-    console.error(error);
-    alert('Erro ao processar reserva. Tente novamente.');
-  } finally {
-    setLoading(false);
-  }
-};
+      // 2️⃣ CONSULTA NA COLEÇÃO DE MENSALISTAS (Horários fixos)
+      // Descobrimos o dia da semana da data escolhida (0=Dom, 1=Seg...)
+      // Adicionamos T00:00:00 para evitar erro de fuso horário na conversão
+      const dataObjeto = new Date(data + 'T00:00:00');
+      const diaSemanaSelecionado = dataObjeto.getDay();
+
+      const qMensalistas = query(
+        collection(db, 'mensalistas'),
+        where('diaSemana', '==', diaSemanaSelecionado),
+        where('horario', '==', horario)
+      );
+      const snapMensalistas = await getDocs(qMensalistas);
+
+      if (!snapMensalistas.empty) {
+        alert('⚠️ Este horário pertence a um mensalista fixo da Arena!');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ SE PASSOU PELAS DUAS, SALVA A RESERVA
+      const apenasNumeros = telefone.replace(/\D/g, '');
+      const whatsappLimpo = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
+
+      const dataLimpa = data.replace(/-/g, '');
+      const horaLimpa = horario.replace(/:/g, '');
+      const dataInicio = `${dataLimpa}T${horaLimpa}00`;
+      
+      const horaFimNum = (parseInt(horaLimpa.substring(0, 2)) + 1).toString().padStart(2, '0');
+      const dataFim = `${dataLimpa}T${horaFimNum}${horaLimpa.substring(2)}00`;
+      const linkAgenda = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('RESERVA: ' + nome)}&details=${encodeURIComponent('Whats: ' + telefone + ' | Duração: ' + duracao)}&dates=${dataInicio}/${dataFim}&ctz=America/Recife`;
+
+      await addDoc(collection(db, 'reservas'), { 
+        nome, 
+        telefone, 
+        data, 
+        horario, 
+        duracao, 
+        tipo: 'diaria',
+        createdAt: new Date() 
+      });
+      
+      await emailjs.send('service_233qjjw', 'template_50j4t97', { 
+        nome, 
+        whatsapp: whatsappLimpo, 
+        whatsapp_display: telefone, 
+        data, 
+        horario, 
+        duracao, 
+        linkAgenda 
+      }, 'KXItBnd5tPOtCMzC8');
+
+      navigate('/pagamento', { state: { nome, data, horario, telefone, duracao } });
+
+    } catch (error) {
+      console.error("Erro na reserva:", error);
+      alert('Erro ao processar reserva. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const styles = {
     page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#FFFFFF', fontFamily: "'Poppins', sans-serif", color: '#00002B', paddingBottom: '40px' },
