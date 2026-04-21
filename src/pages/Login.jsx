@@ -95,7 +95,7 @@ const Login = () => {
             required
           />
 
-          <label style={styles.label}>Senha secreta:</label>
+          <label style={styles.label}>Senha:</label>
           <input 
             style={styles.input} 
             type="password" 
