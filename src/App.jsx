@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import Reserva from './pages/Reserva';
 import Pagamento from './pages/Pagamento';
+import AdminMensalistas from './pages/AdminMensalistas';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/reserva" element={<Reserva />} />
         <Route path="/pagamento" element={<Pagamento />} />
+        <Route path="/admin-mensalistas" element={<AdminMensalistas />} />
       </Routes>
     </BrowserRouter>
   );

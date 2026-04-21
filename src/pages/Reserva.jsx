@@ -21,7 +21,6 @@ function Reserva() {
   const horarioRef = useRef(null);
   const duracaoRef = useRef(null);
 
-  // Listener para detectar mudança de tamanho de tela
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
@@ -56,133 +55,72 @@ function Reserva() {
   };
 
 const reservar = async () => {
-    if (!nome || !telefone || !data || !horario || !duracao) {
-      alert('Preencha todos os campos!');
+  if (!nome || !telefone || !data || !horario || !duracao) {
+    alert('Preencha todos os campos!');
+    return;
+  }
+  setLoading(true);
+
+  try {
+    // 1. Criamos um ID ÚNICO baseado na DATA e HORA (ex: 2026-04-28_20:00)
+    // Isso garante que NUNCA existirão dois documentos no mesmo minuto
+    const reservaId = `${data}_${horario}`;
+    const docRef = doc(db, 'reservas', reservaId);
+    const docSnap = await getDoc(docRef);
+
+    // 2. Se esse ID já existir, nem tenta gravar
+    if (docSnap.exists()) {
+      alert('Este horário já está ocupado por um mensalista ou outra reserva!');
+      setLoading(false);
       return;
     }
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'reservas'),
-        where('data', '==', data),
-        where('horario', '==', horario)
-      );
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        alert('Esse horário exato já está reservado!');
-        setLoading(false);
-        return;
-      }
 
-      // --- AJUSTE AQUI: Limpeza do número para o link ---
-      const apenasNumeros = telefone.replace(/\D/g, '');
-      const whatsappLimpo = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
-      // ------------------------------------------------
+    // Se passou, seguimos com a gravação
+    const apenasNumeros = telefone.replace(/\D/g, '');
+    const whatsappLimpo = apenasNumeros.startsWith('55') ? apenasNumeros : `55${apenasNumeros}`;
+    const dataLimpa = data.replace(/-/g, '');
+    const horaLimpa = horario.replace(/:/g, '');
+    const dataInicio = `${dataLimpa}T${horaLimpa}00`;
+    const horaFimNum = (parseInt(horaLimpa.substring(0, 2)) + 1).toString().padStart(2, '0');
+    const dataFim = `${dataLimpa}T${horaFimNum}${horaLimpa.substring(2)}00`;
+    const linkAgenda = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('RESERVA: ' + nome)}&details=${encodeURIComponent('Whats: ' + telefone + ' | Duração: ' + duracao)}&dates=${dataInicio}/${dataFim}&ctz=America/Recife`;
 
-      const dataLimpa = data.replace(/-/g, '');
-      const horaLimpa = horario.replace(/:/g, '');
-      const dataInicio = `${dataLimpa}T${horaLimpa}00`;
-      const horaFimNum = (parseInt(horaLimpa.substring(0, 2)) + 1).toString().padStart(2, '0');
-      const dataFim = `${dataLimpa}T${horaFimNum}${horaLimpa.substring(2)}00`;
-      const linkAgenda = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('RESERVA: ' + nome)}&details=${encodeURIComponent('Whats: ' + telefone + ' | Duração: ' + duracao)}&dates=${dataInicio}/${dataFim}&ctz=America/Recife`;
+    // 3. USAMOS 'setDoc' com o ID ÚNICO em vez de 'addDoc'
+    await setDoc(docRef, { 
+      nome, 
+      telefone, 
+      data, 
+      horario, 
+      duracao, 
+      tipo: 'diaria',
+      createdAt: new Date() 
+    });
+    
+    await emailjs.send('service_233qjjw', 'template_50j4t97', { 
+      nome, whatsapp: whatsappLimpo, whatsapp_display: telefone, 
+      data, horario, duracao, linkAgenda 
+    }, 'KXItBnd5tPOtCMzC8');
 
-      await addDoc(collection(db, 'reservas'), { nome, telefone, data, horario, duracao, createdAt: new Date() });
-      
-      // Enviando whatsappLimpo para o link e telefone (formatado) para o texto
-      await emailjs.send('service_233qjjw', 'template_50j4t97', { 
-        nome, 
-        whatsapp: whatsappLimpo, 
-        whatsapp_display: telefone, 
-        data, 
-        horario, 
-        duracao, 
-        linkAgenda 
-      }, 'KXItBnd5tPOtCMzC8');
+    navigate('/pagamento', { state: { nome, data, horario, telefone, duracao } });
+  } catch (error) {
+    console.error(error);
+    alert('Erro ao processar reserva. Tente novamente.');
+  } finally {
+    setLoading(false);
+  }
+};
 
-      navigate('/pagamento', { state: { nome, data, horario, telefone, duracao } });
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao processar reserva.');
-    } finally {
-      setLoading(false);
-    }
-  };
   const styles = {
-    page: { 
-      minHeight: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      backgroundColor: '#FFFFFF', 
-      fontFamily: "'Poppins', sans-serif", 
-      color: '#00002B',
-      paddingBottom: '40px'
-    },
+    page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#FFFFFF', fontFamily: "'Poppins', sans-serif", color: '#00002B', paddingBottom: '40px' },
     topBarContainer: { width: '100%', display: 'flex', flexDirection: 'column' },
     stripeBlue: { width: '100%', height: '12px', backgroundColor: '#00002B' },
     stripeYellow: { width: '100%', height: '8px', backgroundColor: '#FDCC1A' },
-    card: { 
-      background: '#fff', 
-      padding: isMobile ? '30px 15px' : '50px 40px', 
-      width: '90%', 
-      maxWidth: '550px', 
-      border: '3px solid #00002B', 
-      boxShadow: isMobile ? '12px 12px 0px #FDCC1A' : '20px 20px 0px #FDCC1A', 
-      textAlign: 'center', 
-      marginTop: isMobile ? '20px' : '40px' 
-    },
+    card: { background: '#fff', padding: isMobile ? '30px 15px' : '50px 40px', width: '90%', maxWidth: '550px', border: '3px solid #00002B', boxShadow: isMobile ? '12px 12px 0px #FDCC1A' : '20px 20px 0px #FDCC1A', textAlign: 'center', marginTop: isMobile ? '20px' : '40px' },
     label: { textAlign: 'left', display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '5px', color: '#00002B', textTransform: 'uppercase' },
-    input: { 
-      width: '100%', 
-      padding: isMobile ? '14px' : '18px', 
-      marginBottom: '15px', 
-      borderRadius: '0px', 
-      border: '2px solid #00002B', 
-      fontSize: isMobile ? '16px' : '18px', 
-      outline: 'none', 
-      boxSizing: 'border-box', 
-      fontFamily: 'inherit', 
-      backgroundColor: 'white',
-      WebkitAppearance: 'none' // Remove sombras internas no iOS
-    },
-    button: { 
-      width: '100%', 
-      padding: '18px', 
-      border: '2px solid #00002B', 
-      background: hover ? '#FDCC1A' : '#00002B', 
-      color: hover ? '#00002B' : '#FFFFFF', 
-      fontWeight: '900', 
-      fontSize: isMobile ? '16px' : '18px', 
-      cursor: 'pointer', 
-      transition: '0.2s all ease', 
-      textTransform: 'uppercase', 
-      letterSpacing: '1px',
-      marginTop: '10px'
-    },
-    mensalistaBox: { 
-      marginTop: '20px', 
-      padding: '15px', 
-      border: '2px dashed #00002B', 
-      cursor: 'pointer', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      gap: '10px', 
-      fontWeight: '800', 
-      fontSize: isMobile ? '13px' : '15px',
-      transition: '0.2s' 
-    },
-    backLink: { 
-      marginTop: '25px', 
-      display: 'inline-block', 
-      color: '#00002B', 
-      fontSize: '12px', 
-      fontWeight: '700', 
-      cursor: 'pointer', 
-      textTransform: 'uppercase', 
-      letterSpacing: '1px',
-      textDecoration: 'underline'
-    }
+    input: { width: '100%', padding: isMobile ? '14px' : '18px', marginBottom: '15px', borderRadius: '0px', border: '2px solid #00002B', fontSize: isMobile ? '16px' : '18px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', backgroundColor: 'white' },
+    button: { width: '100%', padding: '18px', border: '2px solid #00002B', background: hover ? '#FDCC1A' : '#00002B', color: hover ? '#00002B' : '#FFFFFF', fontWeight: '900', fontSize: isMobile ? '16px' : '18px', cursor: 'pointer', transition: '0.2s all ease', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '10px' },
+    mensalistaBox: { marginTop: '20px', padding: '15px', border: '2px dashed #00002B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: '800', fontSize: isMobile ? '13px' : '15px', transition: '0.2s' },
+    backLink: { marginTop: '25px', display: 'inline-block', color: '#00002B', fontSize: '12px', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', textDecoration: 'underline' }
   };
 
   return (
