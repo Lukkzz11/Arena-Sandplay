@@ -14,7 +14,12 @@ const Login = () => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, senha);
-      navigate('/admin-mensalistas');
+      
+      // ✅ Atualizado para a nova rota de Administração
+      // Se no seu App.js o 'path' ainda for '/admin-mensalistas', mantenha como estava.
+      // Se você mudou o 'path' para '/administracao', altere aqui também.
+      navigate('/administracao'); 
+      
     } catch (error) {
       alert("ACESSO NEGADO: Credenciais incorretas.");
     } finally {

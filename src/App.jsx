@@ -7,11 +7,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import Home from './pages/Home';
 import Reserva from './pages/Reserva';
 import Pagamento from './pages/Pagamento';
-import AdminMensalistas from './pages/AdminMensalistas';
+import Administração from './pages/Administração'; // Nome atualizado aqui
 import Login from './pages/Login';
 
 // --- COMPONENTE DE PROTEÇÃO ---
-// Ele verifica se existe um usuário logado. Se não, manda pro /login
 const PrivateRoute = ({ children }) => {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -24,7 +23,7 @@ const PrivateRoute = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  if (loading) return null; // Ou um spinner de carregamento
+  if (loading) return null; 
   return user ? children : <Navigate to="/login" />;
 };
 
@@ -40,10 +39,10 @@ function App() {
 
         {/* Rota Protegida (Só entra com login) */}
         <Route 
-          path="/admin-mensalistas" 
+          path="/administracao" 
           element={
             <PrivateRoute>
-              <AdminMensalistas />
+              <Administração /> {/* Nome atualizado aqui */}
             </PrivateRoute>
           } 
         />

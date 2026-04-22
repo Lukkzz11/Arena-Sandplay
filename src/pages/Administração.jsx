@@ -8,7 +8,8 @@ const converterParaMinutos = (horarioStr) => {
   return horas * 60 + minutos;
 };
 
-const AdminMensalistas = () => {
+// ✅ Nome alterado para Administração
+const Administração = () => {
   const [mensalistas, setMensalistas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
@@ -162,7 +163,7 @@ const AdminMensalistas = () => {
     <div style={styles.container}>
       <div style={styles.card}>
         <h2 style={{ fontWeight: '900', textAlign: 'center', textTransform: 'uppercase', marginBottom: '25px' }}>
-          {editandoId ? 'Editar' : 'Novo'} <span style={{ color: '#FDCC1A' }}>Mensalista</span>
+          {editandoId ? 'Editar' : 'Nova'} <span style={{ color: '#FDCC1A' }}>Administração</span>
         </h2>
 
         <form onSubmit={salvarMensalista}>
@@ -292,4 +293,5 @@ const AdminMensalistas = () => {
   );
 };
 
-export default AdminMensalistas;
+// ✅ Export atualizado
+export default Administração;
