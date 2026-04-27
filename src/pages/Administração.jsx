@@ -1,297 +1,207 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../services/firebase'; 
-import { collection, query, getDocs, doc, addDoc, updateDoc, deleteDoc, where } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { db } from '../services/firebase';
+import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+import emailjs from '@emailjs/browser';
 
-// Função auxiliar para converter "17:30" em 1050 minutos
-const converterParaMinutos = (horarioStr) => {
-  const [horas, minutos] = horarioStr.split(':').map(Number);
-  return horas * 60 + minutos;
-};
-
-// ✅ Nome alterado para Administração
 const Administração = () => {
-  const [mensalistas, setMensalistas] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [editandoId, setEditandoId] = useState(null);
-  
-  // Estados do Formulário
-  const [novoNome, setNovoNome] = useState('');
-  const [novoTelefone, setNovoTelefone] = useState('');
-  const [valorAcordado, setValorAcordado] = useState('');
-  const [novoDia, setNovoDia] = useState('1'); 
-  const [novoHorario, setNovoHorario] = useState('');
-  const [duracao, setDuracao] = useState('1');
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [renovados, setRenovados] = useState({});
+  const [itemSelecionado, setItemSelecionado] = useState(null);
+  const [editando, setEditando] = useState(false);
+  const navigate = useNavigate();
 
-  // Referências para pular campos com Enter
-  const telRef = useRef(null);
-  const valorRef = useRef(null);
-  const diaRef = useRef(null);
-  const inicioRef = useRef(null);
-  const duracaoRef = useRef(null);
-
-  const carregarMensalistas = async () => {
-    try {
-      const q = collection(db, "mensalistas"); 
-      const querySnapshot = await getDocs(q);
-      setMensalistas(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      console.error("Erro ao buscar mensalistas:", error);
-    }
-  };
-
-  useEffect(() => { carregarMensalistas(); }, []);
-
-  // Navegação por Teclado
-  const handleKeyDown = (e, nextRef) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (nextRef && nextRef.current) {
-        nextRef.current.focus();
-      }
-    }
-  };
-
-  const formatarTelefone = (valor) => {
-    const numeros = valor.replace(/\D/g, '');
-    if (!numeros) return '';
-    if (numeros.length <= 2) return `(${numeros}`;
-    if (numeros.length <= 3) return `(${numeros.slice(0, 2)}) ${numeros.slice(2)}`;
-    if (numeros.length <= 7) return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 3)}.${numeros.slice(3)}`;
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 3)}.${numeros.slice(3, 7)}-${numeros.slice(7, 11)}`;
-  };
-
-  const formatarMoeda = (valor) => {
-    const apenasNumeros = valor.replace(/\D/g, '');
-    if (!apenasNumeros) return '';
-    return `R$ ${apenasNumeros}`;
-  };
-
-  const calcularTermino = (inicio, horasAdd) => {
-    if (!inicio) return "--:--";
-    const [h, m] = inicio.split(':').map(Number);
-    const totalMinutos = h * 60 + m + parseFloat(horasAdd) * 60;
-    const fimH = Math.floor(totalMinutos / 60) % 24;
-    const fimM = totalMinutos % 60;
-    return `${fimH.toString().padStart(2, '0')}:${fimM.toString().padStart(2, '0')}`;
-  };
-
-  const prepararEdicao = (m) => {
-    setEditandoId(m.id);
-    setNovoNome(m.nome.toUpperCase());
-    setNovoTelefone(m.telefone);
-    setValorAcordado(m.valor.includes('R$') ? m.valor : `R$ ${m.valor}`);
-    setNovoDia(m.diaSemana.toString());
-    setNovoHorario(m.horario);
-    setDuracao(m.duracao);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const limparFormulario = () => {
-    setEditandoId(null);
-    setNovoNome(''); setNovoTelefone(''); setValorAcordado(''); setNovoHorario(''); setDuracao('1');
-  };
-
-  const excluirMensalista = async () => {
-    if (!editandoId) return;
-    const confirmar = window.confirm(`Deseja EXCLUIR o mensalista ${novoNome}?`);
-    if (confirmar) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, "mensalistas", editandoId));
-        alert("Removido!");
-        limparFormulario();
-        carregarMensalistas();
-      } catch (error) { console.error(error); } finally { setLoading(false); }
-    }
-  };
-
-  const salvarMensalista = async (e) => {
-    if (e) e.preventDefault();
-    if (!novoNome || !novoHorario || !novoTelefone) return alert("Campos obrigatórios!");
+  const carregarDados = async () => {
     setLoading(true);
-
     try {
-      const novoInicioMin = converterParaMinutos(novoHorario);
-      const novoFimMin = novoInicioMin + (parseFloat(duracao) * 60);
-      const q = query(collection(db, "mensalistas"), where("diaSemana", "==", parseInt(novoDia)));
-      const snap = await getDocs(q);
+      const [sM, sD] = await Promise.all([
+        getDocs(collection(db, "mensalistas")),
+        getDocs(collection(db, "diaristas"))
+      ]);
+      const dM = sM.docs.map(d => ({ id: d.id, tipoCol: 'mensalistas', ...d.data() }));
+      const dD = sD.docs.map(d => ({ id: d.id, tipoCol: 'diaristas', ...d.data() }));
+      const consolidado = [...dM, ...dD].sort((a, b) => a.horario.localeCompare(b.horario));
+      setLista(consolidado);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { carregarDados(); }, []);
+
+  const salvarEdicao = async (e) => {
+    e.preventDefault();
+    try {
+      const ref = doc(db, itemSelecionado.tipoCol, itemSelecionado.id);
       
-      const temConflito = snap.docs.some(docSnap => {
-        if (docSnap.id === editandoId) return false;
-        const m = docSnap.data();
-        const mInicio = converterParaMinutos(m.horario);
-        const mFim = converterParaMinutos(m.horarioFim);
-        return (novoInicioMin < mFim && novoFimMin > mInicio);
-      });
-
-      if (temConflito) {
-        alert("⚠️ CONFLITO DE HORÁRIO!");
-        setLoading(false);
-        return;
+      // Se for Diarista, precisamos garantir que o valor seja extraído se mudarem o pacote
+      let valorFinal = itemSelecionado.valor;
+      if (itemSelecionado.tipo === 'DIARISTA' && itemSelecionado.tempoPermanencia.includes('-')) {
+        valorFinal = itemSelecionado.tempoPermanencia.split('-').trim();
       }
 
-      const dados = {
-        nome: novoNome.toUpperCase(), telefone: novoTelefone, valor: valorAcordado,
-        diaSemana: parseInt(novoDia), horario: novoHorario,
-        horarioFim: calcularTermino(novoHorario, duracao), duracao: duracao
-      };
+      const dadosParaSalvar = { ...itemSelecionado, valor: valorFinal };
+      await updateDoc(ref, dadosParaSalvar);
 
-      if (editandoId) {
-        await updateDoc(doc(db, "mensalistas", editandoId), dados);
-      } else {
-        await addDoc(collection(db, "mensalistas"), dados);
-      }
+      await emailjs.send('service_233qjjw', 'template_50j4t97', {
+        nome: itemSelecionado.nome,
+        whatsapp: itemSelecionado.telefone.replace(/\D/g, ''),
+        data: itemSelecionado.tipo === 'MENSALISTA' ? `MENSALISTA (${itemSelecionado.mes})` : itemSelecionado.dataJogo,
+        horario: itemSelecionado.horario,
+        status: "⚠️ AGENDAMENTO ATUALIZADO"
+      }, 'KXItBnd5tPOtCMzC8');
 
-      limparFormulario();
-      carregarMensalistas();
-      alert("Sucesso!");
-    } catch (error) { console.error(error); } finally { setLoading(false); }
+      alert("✅ Atualizado e Cliente Notificado!");
+      setEditando(false);
+      setItemSelecionado(null);
+      carregarDados();
+    } catch (e) { alert("Erro ao salvar edição"); }
+  };
+
+  const handleRenovar = async (id, colecao) => {
+    try {
+      await updateDoc(doc(db, colecao, id), { ultimaRenovacao: new Date().toISOString() });
+      setRenovados(prev => ({ ...prev, [id]: true }));
+      setTimeout(() => setRenovados(prev => ({ ...prev, [id]: false })), 3000);
+    } catch (e) { alert("Erro ao renovar"); }
+  };
+
+  const excluirRegistro = async (id, colecao, nome) => {
+    if (window.confirm(`Apagar ${nome}?`)) {
+      try {
+        await deleteDoc(doc(db, colecao, id));
+        carregarDados();
+      } catch (e) { alert("Erro ao excluir"); }
+    }
   };
 
   const styles = {
-    container: { maxWidth: '600px', margin: '40px auto', padding: '20px', fontFamily: "'Poppins', sans-serif", color: '#00002B' },
-    card: { background: '#fff', padding: '30px', border: '3px solid #00002B', boxShadow: '15px 15px 0px #FDCC1A' },
-    label: { display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '5px', textTransform: 'uppercase' },
-    input: { width: '100%', padding: '12px', marginBottom: '15px', border: '2px solid #00002B', fontSize: '16px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' },
-    btnPrincipal: { width: '100%', padding: '18px', background: '#00002B', color: 'white', border: '2px solid #00002B', fontWeight: '900', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px' },
-    btnExcluir: { width: '100%', padding: '12px', background: '#FF4D4D', color: 'white', border: '2px solid #00002B', fontWeight: '900', cursor: 'pointer', textTransform: 'uppercase', marginTop: '15px' },
-    item: { padding: '15px', border: '2px solid #00002B', marginBottom: '15px', background: '#f9f9f9', cursor: 'pointer', position: 'relative' },
-    badge: { position: 'absolute', top: '10px', right: '10px', background: '#FDCC1A', padding: '2px 8px', fontSize: '10px', fontWeight: '900', border: '1px solid #00002B' }
+    main: { maxWidth: '1100px', margin: '20px auto', padding: '0 20px', fontFamily: "'Poppins', sans-serif" },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
+    gridBotoes: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' },
+    cardAcao: { background: '#FFF', padding: '25px', border: '3px solid #000', boxShadow: '8px 8px 0px #FDCC1A', cursor: 'pointer', textAlign: 'center' },
+    item: { padding: '20px', border: '2px solid #000', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFF', boxShadow: '4px 4px 0px #000', cursor: 'pointer' },
+    modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+    modalContent: { background: '#FFF', padding: '30px', border: '4px solid #000', width: '90%', maxWidth: '550px', boxShadow: '15px 15px 0px #FDCC1A', position: 'relative', maxHeight: '90vh', overflowY: 'auto' },
+    input: { width: '100%', padding: '12px', marginBottom: '12px', border: '2px solid #000', fontWeight: 'bold', boxSizing: 'border-box' },
+    label: { fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={{ fontWeight: '900', textAlign: 'center', textTransform: 'uppercase', marginBottom: '25px' }}>
-          {editandoId ? 'Editar' : 'Nova'} <span style={{ color: '#FDCC1A' }}>Administração</span>
-        </h2>
+    <div style={styles.main}>
+      <header style={styles.header}>
+        <h1 style={{ fontWeight: '900' }}>PAINEL <span style={{ color: '#FDCC1A' }}>ARENA</span></h1>
+        <button onClick={carregarDados} style={{ fontWeight: '900', border: 'none', background: 'none', cursor: 'pointer' }}>🔄 ATUALIZAR</button>
+      </header>
 
-        <form onSubmit={salvarMensalista}>
-          <label style={styles.label}>Nome Completo:</label>
-          <input 
-            style={styles.input} 
-            type="text" 
-            value={novoNome} 
-            onChange={e => setNovoNome(e.target.value.toUpperCase())} 
-            onKeyDown={(e) => handleKeyDown(e, telRef)}
-            autoFocus
-          />
-
-          <label style={styles.label}>WhatsApp:</label>
-          <input 
-            ref={telRef}
-            style={styles.input} 
-            type="tel" 
-            value={novoTelefone} 
-            onChange={e => setNovoTelefone(formatarTelefone(e.target.value))} 
-            onKeyDown={(e) => handleKeyDown(e, valorRef)}
-            placeholder="(XX) X.XXXX-XXXX" 
-          />
-
-          <label style={styles.label}>Valor Acordado:</label>
-          <input 
-            ref={valorRef}
-            style={styles.input} 
-            type="text" 
-            value={valorAcordado} 
-            onChange={e => setValorAcordado(formatarMoeda(e.target.value))} 
-            onKeyDown={(e) => handleKeyDown(e, diaRef)}
-            placeholder="R$" 
-          />
-
-          <label style={styles.label}>Dia da Semana:</label>
-          <select 
-            ref={diaRef}
-            style={styles.input} 
-            value={novoDia} 
-            onChange={e => setNovoDia(e.target.value)}
-            onKeyDown={(e) => handleKeyDown(e, inicioRef)}
-          >
-            <option value="1">Segunda-feira</option>
-            <option value="2">Terça-feira</option>
-            <option value="3">Quarta-feira</option>
-            <option value="4">Quinta-feira</option>
-            <option value="5">Sexta-feira</option>
-            <option value="6">Sábado</option>
-            <option value="0">Domingo</option>
-          </select>
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={styles.label}>Início:</label>
-              <input 
-                ref={inicioRef}
-                style={styles.input} 
-                type="time" 
-                value={novoHorario} 
-                onChange={e => setNovoHorario(e.target.value)} 
-                onKeyDown={(e) => handleKeyDown(e, duracaoRef)}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={styles.label}>Duração:</label>
-              <select 
-                ref={duracaoRef}
-                style={styles.input} 
-                value={duracao} 
-                onChange={e => setDuracao(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && salvarMensalista()}
-              >
-                <option value="1">1h</option>
-                <option value="1.5">1h30</option>
-                <option value="2">2h</option>
-                <option value="3">3h</option>
-                <option value="4">4h</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ background: '#00002B', color: '#FFF', padding: '15px', marginBottom: '20px', textAlign: 'center', fontWeight: '900', border: '2px solid #00002B', textTransform: 'uppercase', fontSize: '12px' }}>
-             Término: {calcularTermino(novoHorario, duracao)}
-          </div>
-
-          <button type="submit" disabled={loading} style={styles.btnPrincipal}>
-            {loading ? 'SALVANDO...' : editandoId ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR MENSALISTA'}
-          </button>
-          
-          {editandoId && (
-            <>
-              <button type="button" onClick={excluirMensalista} disabled={loading} style={styles.btnExcluir}>
-                Excluir Mensalista
-              </button>
-              <button type="button" onClick={limparFormulario} style={{ ...styles.btnPrincipal, background: 'none', color: '#00002B', marginTop: '10px', border: 'none', textDecoration: 'underline' }}>
-                CANCELAR EDIÇÃO
-              </button>
-            </>
-          )}
-        </form>
+      <div style={styles.gridBotoes}>
+        <div style={styles.cardAcao} onClick={() => navigate('/mensalistas-adm')}><h2>+ MENSALISTA</h2></div>
+        <div style={styles.cardAcao} onClick={() => navigate('/diaristas-adm')}><h2>+ DIARISTA</h2></div>
       </div>
 
-      <div style={{ marginTop: '50px' }}>
-        <h4 style={{ textTransform: 'uppercase', fontWeight: '900', marginBottom: '20px', borderBottom: '3px solid #FDCC1A', display: 'inline-block' }}>
-          Lista de Mensalistas
-        </h4>
-
-        {mensalistas.map(m => (
-          <div key={m.id} style={styles.item} onClick={() => prepararEdicao(m)}>
-            <div style={styles.badge}>EDITAR</div>
-            <div style={{ fontWeight: '900', fontSize: '16px' }}>{m.nome}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', alignItems: 'center' }}>
-              <div style={{ fontSize: '13px', fontWeight: '600' }}>
-                {m.horario} - {m.horarioFim} | Dia {m.diaSemana}
-                <br />
-                <span style={{ opacity: 0.7 }}>{m.telefone}</span>
-              </div>
-              <div style={{ background: '#00002B', color: '#FFF', padding: '5px 10px', fontWeight: '900', fontSize: '14px' }}>
-                {m.valor}
-              </div>
-            </div>
+      <h3 style={{ fontWeight: '900', textTransform: 'uppercase' }}>Lista de Agendamentos</h3>
+      {loading ? <p>Carregando...</p> : lista.map(m => (
+        <div key={m.id} style={styles.item} onClick={() => { setItemSelecionado(m); setEditando(false); }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ background: m.tipo === 'MENSALISTA' ? '#000' : '#FDCC1A', color: m.tipo === 'MENSALISTA' ? '#FFF' : '#000', padding: '2px 8px', fontSize: '10px', fontWeight: '900' }}>{m.tipo}</span>
+            <p style={{ fontWeight: '900', fontSize: '18px', margin: '5px 0' }}>{m.nome}</p>
+            <div style={{ fontSize: '13px', fontWeight: '700' }}>🕒 {m.horario} | {m.tipo === 'MENSALISTA' ? `Dia ${m.diaSemana}` : m.dataJogo}</div>
           </div>
-        ))}
-      </div>
+          <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
+            {m.tipo === 'MENSALISTA' && (
+              <button style={{ background: renovados[m.id] ? '#2ecc71' : '#FFF', border: '2px solid #000', fontWeight: '900', padding: '8px' }} onClick={() => handleRenovar(m.id, m.tipoCol)}>RENOVAR</button>
+            )}
+            <button style={{ background: '#FDCC1A', border: '2px solid #000', fontWeight: '900', padding: '8px' }} onClick={() => { setItemSelecionado(m); setEditando(true); }}>EDITAR</button>
+            <button style={{ background: '#FF4D4D', color: '#FFF', border: '2px solid #000', fontWeight: '900', padding: '8px' }} onClick={() => excluirRegistro(m.id, m.tipoCol, m.nome)}>X</button>
+          </div>
+        </div>
+      ))}
+
+      {itemSelecionado && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <button style={{ position: 'absolute', top: '10px', right: '10px', background: '#000', color: '#FFF', border: 'none', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => { setItemSelecionado(null); setEditando(false); }}>X</button>
+            <h2 style={{ fontWeight: '900' }}>{editando ? 'EDITAR REGISTRO' : 'DETALHES COMPLETO'}</h2>
+            <hr style={{ border: '2px solid #000', marginBottom: '20px' }} />
+
+            {editando ? (
+              <form onSubmit={salvarEdicao}>
+                <label style={styles.label}>Nome:</label>
+                <input style={styles.input} value={itemSelecionado.nome} onChange={e => setItemSelecionado({...itemSelecionado, nome: e.target.value.toUpperCase()})} />
+                
+                <label style={styles.label}>WhatsApp:</label>
+                <input style={styles.input} value={itemSelecionado.telefone} onChange={e => setItemSelecionado({...itemSelecionado, telefone: e.target.value})} />
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={styles.label}>Horário:</label>
+                    <input type="time" style={styles.input} value={itemSelecionado.horario} onChange={e => setItemSelecionado({...itemSelecionado, horario: e.target.value})} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={styles.label}>Valor Atual:</label>
+                    <input style={styles.input} value={itemSelecionado.valor} onChange={e => setItemSelecionado({...itemSelecionado, valor: e.target.value})} />
+                  </div>
+                </div>
+
+                {itemSelecionado.tipo === 'MENSALISTA' ? (
+                  <>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={styles.label}>Duração (h):</label>
+                        <select style={styles.input} value={itemSelecionado.duracao} onChange={e => setItemSelecionado({...itemSelecionado, duracao: e.target.value})}>
+                          <option value="1">1h</option><option value="1.5">1:30h</option><option value="2">2h</option><option value="3">3h</option><option value="4">4h</option>
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={styles.label}>Dia Semana:</label>
+                        <select style={styles.input} value={itemSelecionado.diaSemana} onChange={e => setItemSelecionado({...itemSelecionado, diaSemana: e.target.value})}>
+                          <option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option><option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label style={styles.label}>Mês:</label>
+                    <select style={styles.input} value={itemSelecionado.mes} onChange={e => setItemSelecionado({...itemSelecionado, mes: e.target.value})}>
+                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"].map(m => <option key={m}>{m}</option>)}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <label style={styles.label}>Data do Jogo:</label>
+                    <input type="date" style={styles.input} value={itemSelecionado.dataJogo} onChange={e => setItemSelecionado({...itemSelecionado, dataJogo: e.target.value})} />
+                    <label style={styles.label}>Pacote/Tempo:</label>
+                    <select style={styles.input} value={itemSelecionado.tempoPermanencia} onChange={e => setItemSelecionado({...itemSelecionado, tempoPermanencia: e.target.value})}>
+                      <option value="1 hr - R$ 90">1 hr - R$ 90</option><option value="1:30 hr - R$ 110">1:30 hr - R$ 110</option><option value="2 hr - R$ 120">2 hr - R$ 120</option><option value="3 hr - R$ 150">3 hr - R$ 150</option><option value="4 hr - R$ 200">4 hr - R$ 200</option>
+                    </select>
+                  </>
+                )}
+                <button type="submit" style={{ ...styles.input, background: '#000', color: '#FFF', cursor: 'pointer', marginTop: '10px' }}>SALVAR E NOTIFICAR CLIENTE</button>
+              </form>
+            ) : (
+              <div style={{ fontWeight: 'bold', fontSize: '15px' }}>
+                <p>📌 TIPO: {itemSelecionado.tipo}</p>
+                <p>👤 NOME: {itemSelecionado.nome}</p>
+                <p>📞 WHATSAPP: {itemSelecionado.telefone}</p>
+                <p>🕒 HORÁRIO: {itemSelecionado.horario}</p>
+                <p>💰 VALOR: {itemSelecionado.valor}</p>
+                {itemSelecionado.tipo === 'MENSALISTA' ? (
+                  <>
+                    <p>⏳ DURAÇÃO: {itemSelecionado.duracao}h</p>
+                    <p>📅 DIA: {itemSelecionado.diaSemana}</p>
+                    <p>🗓 MÊS: {itemSelecionado.mes}</p>
+                  </>
+                ) : (
+                  <>
+                    <p>📅 DATA: {itemSelecionado.dataJogo}</p>
+                    <p>⏳ PACOTE: {itemSelecionado.tempoPermanencia}</p>
+                  </>
+                )}
+                <button onClick={() => setEditando(true)} style={{ width: '100%', padding: '12px', background: '#FDCC1A', border: '2px solid #000', fontWeight: '900', marginTop: '15px', cursor: 'pointer' }}>EDITAR INFORMAÇÕES</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// ✅ Export atualizado
 export default Administração;

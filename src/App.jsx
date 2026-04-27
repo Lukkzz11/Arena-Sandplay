@@ -7,8 +7,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import Home from './pages/Home';
 import Reserva from './pages/Reserva';
 import Pagamento from './pages/Pagamento';
-import Administração from './pages/Administração'; // Nome atualizado aqui
+import Administração from './pages/Administração';
 import Login from './pages/Login';
+
+// Import das novas páginas com o "s" corrigido
+import MensalistasADM from './pages/MensalistasADM';
+import DiaristasADM from './pages/DiaristasADM';
 
 // --- COMPONENTE DE PROTEÇÃO ---
 const PrivateRoute = ({ children }) => {
@@ -37,12 +41,31 @@ function App() {
         <Route path="/pagamento" element={<Pagamento />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Rota Protegida (Só entra com login) */}
+        {/* Rotas Protegidas */}
         <Route 
           path="/administracao" 
           element={
             <PrivateRoute>
-              <Administração /> {/* Nome atualizado aqui */}
+              <Administração />
+            </PrivateRoute>
+          } 
+        />
+
+        {/* Rotas com o "s" conforme solicitado */}
+        <Route 
+          path="/mensalistas-adm" 
+          element={
+            <PrivateRoute>
+              <MensalistasADM />
+            </PrivateRoute>
+          } 
+        />
+
+        <Route 
+          path="/diaristas-adm" 
+          element={
+            <PrivateRoute>
+              <DiaristasADM />
             </PrivateRoute>
           } 
         />

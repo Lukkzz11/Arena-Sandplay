@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth"; // Importe o Auth
+import { initializeFirestore } from "firebase/firestore"; // Mudamos aqui
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC5QjlsJJfyIEnw1zuTQe_gPRr5KEucSXw",
@@ -14,6 +14,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Exportações para usar no resto do projeto
-export const db = getFirestore(app);
-export const auth = getAuth(app); // Agora o Login e o App.js vão funcionar
+// Configuração para evitar o erro net::ERR_BLOCKED_BY_CLIENT
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false, // Ajuda em alguns navegadores que bloqueiam streams
+});
+
+export const auth = getAuth(app);
